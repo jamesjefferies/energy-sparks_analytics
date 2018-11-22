@@ -25,7 +25,6 @@ class DashboardConfiguration
                                   electricity_longterm_trend
                                   electricity_by_day_of_week
                                   baseload
-                                  electricity_by_month_year_0_1
                                   intraday_line_school_days
                                   intraday_line_holidays
                                   intraday_line_weekends
