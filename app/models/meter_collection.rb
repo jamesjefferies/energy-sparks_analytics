@@ -48,6 +48,7 @@ class MeterCollection
     @cached_open_time = DateTime.new(0, 1, 1, 7, 0, 0) # for speed
     @cached_close_time = DateTime.new(0, 1, 1, 16, 30, 0) # for speed
 
+    # TODO Move this to Rails code now
     if i_am_running_in_rails?
       pp "Running in Rails environment version: #{Dashboard::VERSION}"
       @heat_meters = school.heat_meters
@@ -80,33 +81,30 @@ class MeterCollection
     end
   end
 
+  # Deprecated - overriden in Rails code
+  # TODO tidy up
   def add_amr_data(meter)
     amr_data = AMRData.new(meter.meter_type)
     readings = []
 
-    if meter.any_aggregated?
-      meter.aggregated_meter_readings.order(:when).each do |amr|
-        amr_data.add(amr.when, OneDayAMRReading.new('Unknown', amr.when, 'ORIG', nil, DateTime.now, amr.readings.map(&:to_f)))
-      end
-    else
-      query = <<-SQL
-        SELECT date_trunc('day', read_at) AS day, array_agg(value ORDER BY read_at ASC) AS values
-        FROM meter_readings
-        WHERE meter_id = #{meter.id}
-        GROUP BY date_trunc('day', read_at)
-      SQL
+    query = <<-SQL
+      SELECT date_trunc('day', read_at) AS day, array_agg(value ORDER BY read_at ASC) AS values
+      FROM meter_readings
+      WHERE meter_id = #{meter.id}
+      GROUP BY date_trunc('day', read_at)
+    SQL
 
-      result = ActiveRecord::Base.connection.exec_query(query)
-      result.each do |row|
-        reading_date = Date.parse(row["day"])
-        array_of_readings = row["values"].delete('{}').split(',').map(&:to_f)
-        if array_of_readings.size == 48
-          amr_data.add(reading_date, OneDayAMRReading.new('Unknown', reading_date, 'ORIG', nil, DateTime.now, array_of_readings))
-        end
+    result = ActiveRecord::Base.connection.exec_query(query)
+    result.each do |row|
+      reading_date = Date.parse(row["day"])
+      array_of_readings = row["values"].delete('{}').split(',').map(&:to_f)
+      if array_of_readings.size == 48
+        amr_data.add(reading_date, OneDayAMRReading.new('Unknown', reading_date, 'ORIG', nil, DateTime.now, array_of_readings))
       end
-
-      throw ArgumentException if school.meters.empty?
     end
+
+    throw ArgumentException if school.meters.empty?
+
     amr_data
   end
 
