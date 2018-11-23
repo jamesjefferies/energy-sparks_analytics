@@ -41,71 +41,24 @@ class MeterCollection
     @urn = school.urn
     @meter_identifier_lookup = {} # [mpan or mprn] => meter
     # Hard code for now
-    @area_name = 'Bath'
+    @area_name = school.area_name
     @aggregated_heat_meters = nil
     @aggregated_electricity_meters = nil
 
     @cached_open_time = DateTime.new(0, 1, 1, 7, 0, 0) # for speed
     @cached_close_time = DateTime.new(0, 1, 1, 16, 30, 0) # for speed
 
-    # TODO Move this to Rails code now
-    if i_am_running_in_rails?
-      pp "Running in Rails environment version: #{Dashboard::VERSION}"
-      @heat_meters = school.heat_meters
-      @electricity_meters = school.electricity_meters
-      # Stored as big decimal
-      @floor_area = school.floor_area.to_f
+    # Normally these would come from the school, hard coded at the mo
+    @holiday_schedule_name = school.area_name.nil? ? ScheduleDataManager::BATH_AREA_NAME : school.area_name
+    @temperature_schedule_name = school.area_name.nil? ? ScheduleDataManager::BATH_AREA_NAME : school.area_name
+    @solar_irradiance_schedule_name = school.area_name.nil? ? ScheduleDataManager::BATH_AREA_NAME : school.area_name
+    @solar_pv_schedule_name = school.area_name.nil? ? ScheduleDataManager::BATH_AREA_NAME : school.area_name
 
-      @heat_meters.each do |heat_meter|
-        heat_meter.amr_data = add_amr_data(heat_meter)
-      end
+    @heat_meters = []
+    @electricity_meters = []
 
-      @electricity_meters.each do |electricity_meter|
-        electricity_meter.amr_data = add_amr_data(electricity_meter)
-      end
-      throw ArgumentException if school.meters.empty?
-    else
-      logger.info "Running standalone, not in Rails environment"
-
-      # Normally these would come from the school, hard coded at the mo
-      @holiday_schedule_name = ScheduleDataManager::BATH_AREA_NAME
-      @temperature_schedule_name = ScheduleDataManager::BATH_AREA_NAME
-      @solar_irradiance_schedule_name = ScheduleDataManager::BATH_AREA_NAME
-      @solar_pv_schedule_name = ScheduleDataManager::BATH_AREA_NAME
-      @heat_meters = []
-      @electricity_meters = []
-
-      @floor_area = school.floor_area
-
-      pp "Running standalone, not in Rails environment version: #{Dashboard::VERSION}"
-    end
-  end
-
-  # Deprecated - overriden in Rails code
-  # TODO tidy up
-  def add_amr_data(meter)
-    amr_data = AMRData.new(meter.meter_type)
-    readings = []
-
-    query = <<-SQL
-      SELECT date_trunc('day', read_at) AS day, array_agg(value ORDER BY read_at ASC) AS values
-      FROM meter_readings
-      WHERE meter_id = #{meter.id}
-      GROUP BY date_trunc('day', read_at)
-    SQL
-
-    result = ActiveRecord::Base.connection.exec_query(query)
-    result.each do |row|
-      reading_date = Date.parse(row["day"])
-      array_of_readings = row["values"].delete('{}').split(',').map(&:to_f)
-      if array_of_readings.size == 48
-        amr_data.add(reading_date, OneDayAMRReading.new('Unknown', reading_date, 'ORIG', nil, DateTime.now, array_of_readings))
-      end
-    end
-
-    throw ArgumentException if school.meters.empty?
-
-    amr_data
+    @floor_area = school.floor_area
+    pp "Running standalone, not in Rails environment version: #{Dashboard::VERSION}"
   end
 
   def matches_identifier?(identifier, identifier_type)
@@ -208,38 +161,19 @@ class MeterCollection
 
   # held at building level as a school building e.g. a community swimming pool may have a different holiday schedule
   def holidays
-    if i_am_running_in_rails?
-      ScheduleDataManager.holidays(nil, @school.calendar_id)
-    else
-      ScheduleDataManager.holidays(@holiday_schedule_name)
-    end
+    ScheduleDataManager.holidays(@holiday_schedule_name)
   end
 
   def temperatures
-    if i_am_running_in_rails?
-      temperature_area_id = @school.temperature_area_id || DataFeed.find_by(type: "DataFeeds::WeatherUnderground").area_id
-      ScheduleDataManager.temperatures(nil, temperature_area_id)
-    else
-      ScheduleDataManager.temperatures(@temperature_schedule_name)
-    end
+    ScheduleDataManager.temperatures(@temperature_schedule_name)
   end
 
   def solar_irradiation
-    if i_am_running_in_rails?
-      solar_irradiance_area_id = @school.solar_irradiance_area_id || DataFeed.find_by(type: "DataFeeds::WeatherUnderground").area_id
-      ScheduleDataManager.solar_irradiation(nil, solar_irradiance_area_id)
-    else
-      ScheduleDataManager.solar_irradiation(@solar_irradiance_schedule_name)
-    end
+    ScheduleDataManager.solar_irradiation(@solar_irradiance_schedule_name)
   end
 
   def solar_pv
-    if i_am_running_in_rails?
-      solar_pv_tuos_area_id = @school.solar_pv_tuos_area_id || DataFeed.find_by(type: "DataFeeds::SolarPvTuos").area_id
-      ScheduleDataManager.solar_pv(nil, solar_pv_tuos_area_id)
-    else
-      ScheduleDataManager.solar_pv(@solar_pv_schedule_name)
-    end
+    ScheduleDataManager.solar_pv(@solar_pv_schedule_name)
   end
 
   def grid_carbon_intensity
@@ -253,11 +187,5 @@ class MeterCollection
     end
     @heating_models[:basic]
     #  @heating_on_periods = @model.calculate_heating_periods(@period)
-  end
-
-private
-
-  def i_am_running_in_rails?
-    @school.respond_to?(:calendar)
   end
 end
