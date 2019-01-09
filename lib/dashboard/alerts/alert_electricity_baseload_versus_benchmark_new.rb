@@ -52,7 +52,9 @@ class AlertElectricityBaseloadVersusBenchmarkNew < AlertAnalysisBase
     {
       benchmark_per_pupil: benchmark_per_pupil,
       baseload: avg_baseload,
-      benchmark_per_floor_area: benchmark_per_floor_area
+      benchmark_per_floor_area: benchmark_per_floor_area,
+      chart_data: chart_data # This is for any chart data which the front end might want to render
+      chart_html: chart_html # This would be in the interim to allow for charts to be rendered as they are at the moment for some alerts.
     }
   end
 
